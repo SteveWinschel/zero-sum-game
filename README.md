@@ -4,15 +4,13 @@ A command-line based (a user interface will be added later) stock exchange simul
 
 ## Features (Current/Planned)
 
-* **Stock Exchange Core**: Simulates a stock exchange environment.
+* **Securities Exchange**: Simulates a securities exchange.
 * **Securities Management**: Add and manage different stock securities with ticker symbols, names, industries, and initial prices.
 * **Trader Simulation**: Create traders with initial cash balances and track their portfolios.
 * **Order Matching**: Supports limit buy and sell orders with a basic matching engine.
 * **Order Book**: Maintains buy and sell order books for each security.
 * **Trade Execution & History**: Records executed trades.
 * **Portfolio Tracking**: Calculates trader net worth based on cash and current market prices of owned shares.
-
-*(Based on the provided Rust files, this seems to be a command-line application. If Bevy integration for a GUI is planned, you can add details about that here.)*
 
 ## Getting Started
 
