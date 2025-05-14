@@ -18,7 +18,7 @@ A command-line based (a user interface will be added later) stock exchange simul
 
 ### Prerequisites
 
-* Rust programming language and Cargo package manager. (Install from [https://rustup.rs/](https://rustup.rs/))
+* Rust programming language and Cargo package manager. (Install from "https://www.rust-lang.org/tools/install")
 
 ### Building
 
@@ -28,10 +28,7 @@ A command-line based (a user interface will be added later) stock exchange simul
     cd zero-sum-game
     ```
 2.  Build the project:
-    ```bash
-    cargo build
-    ```
-    For a release build (optimized):
+    Compilation (optimized):
     ```bash
     cargo build --release
     ```
@@ -40,4 +37,4 @@ A command-line based (a user interface will be added later) stock exchange simul
 
 Execute the compiled binary:
 ```bash
-cargo run
+cargo run --release
