@@ -27,4 +27,4 @@ Thumbs.db
 *.log
 
 # Build artifacts specific to some crates (optional, add if needed)
-# e.g. native/
+Cargo.lock
