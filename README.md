@@ -3,6 +3,8 @@
 **Zero Sum Game** is a security exchange simulation built in Rust. This is my first significant project, undertaken primarily for learning and fun, aiming to explore software development concepts through the creation of a system that models core financial market dynamics. While it currently outputs to the console, the goal is to simulate functionalities like order matching, securities management, and portfolio tracking.
 
 This project serves as a personal exploration into Rust programming, financial technology (FinTech) concepts, and simulation development.
+Feel free to tell me how and why my code sucks.
+Ideas, critique, comtributions and especially insults are appreciated.
 
 ## Key Features (Current & In-Progress)
 
