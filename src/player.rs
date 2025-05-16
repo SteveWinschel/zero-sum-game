@@ -12,8 +12,8 @@ pub struct PortfolioItem {
 
 #[derive(Debug)]
 pub struct Player {
-    pub name: &'static &str, // For display purposes, can be kept
-    pub cash_balance: u64,   // In cents
+    pub name: &'static str, // For display purposes, can be kept
+    pub cash_balance: u64,  // In cents
     pub portfolio: HashMap<Cow<'static, str>, PortfolioItem>, // Ticker symbol -> PortfolioItem
 }
 
