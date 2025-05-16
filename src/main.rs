@@ -3,8 +3,13 @@ mod orders;
 mod player;
 mod securities;
 mod securities_lib;
-use crate::orders::{Order, OrderType, Trade};
-use std::io::{self, Write}; // Add for input/output
+
+use crate::exchange::StockExchange;
+use crate::player::Player;
+use crate::securities::get_initial_securities;
+
+use crate::orders::{Order, OrderType}; // Removed 'Trade' as it was warned as unused directly
+use std::io::{self, Write};
 
 fn main() {
     println!("--- Zero Sum Game Stock Exchange Simulation ---");
@@ -17,16 +22,14 @@ fn main() {
 
     let initial_securities = get_initial_securities();
     for sec in initial_securities {
-        // println!("Adding security: {}", sec.ticker_symbol); // Potentially less verbose for interactive
         if let Err(e) = stock_exchange.add_security(sec) {
             eprintln!("Error adding security: {}", e);
         }
     }
 
-    // Display initial securities once
     println!("\n--- Available Securities ---");
-    for ticker in stock_exchange.securities.keys() {
-        if let Some(sec_detail) = stock_exchange.get_security(ticker) {
+    for ticker_cow in stock_exchange.securities.keys() {
+        if let Some(sec_detail) = stock_exchange.get_security(ticker_cow.as_ref()) {
             println!(
                 "  {}: {} - Price: ${:.2}",
                 sec_detail.ticker_symbol,
@@ -44,8 +47,8 @@ fn main() {
     );
 
     loop {
-        print!("\n> "); // Prompt
-        io::stdout().flush().unwrap(); // Ensure '>' is printed before input
+        print!("\n> ");
+        io::stdout().flush().unwrap();
 
         let mut input = String::new();
         if io::stdin().read_line(&mut input).is_err() {
@@ -59,23 +62,23 @@ fn main() {
         }
 
         let command = parts[0].to_lowercase();
-        current_sim_time += 1; // Increment simulation time per command or per order
+        current_sim_time += 1;
 
         match command.as_str() {
             "buy" => {
-                // Expected: buy <TICKER> <QUANTITY> <PRICE_PER_SHARE>
-                // Example: buy XYZ 10 150.00
                 if parts.len() == 4 {
-                    let ticker = parts[1].to_uppercase();
-                    let quantity: Result<u64, _> = parts[2].parse();
+                    let ticker_string = parts[1].to_uppercase();
+                    let quantity_res: Result<u64, _> = parts[2].parse();
                     let price_str = parts[3];
-                    // Convert price (e.g., "150.00") to u64 cents
-                    let price: Result<u64, _> = price_str.replace('.', "").parse();
+                    let price_res: Result<u64, _> = price_str.replace('.', "").parse();
 
-                    match (quantity, price) {
+                    match (quantity_res, price_res) {
                         (Ok(qty), Ok(prc)) => {
-                            if !stock_exchange.securities.contains_key(ticker.as_str()) {
-                                println!("Error: Security {} not found.", ticker);
+                            if !stock_exchange
+                                .securities
+                                .contains_key(ticker_string.as_str())
+                            {
+                                println!("Error: Security {} not found.", ticker_string);
                                 continue;
                             }
                             let total_cost = qty * prc;
@@ -91,7 +94,7 @@ fn main() {
                             let order = Order::new(
                                 next_order_id_counter,
                                 OrderType::Buy,
-                                Box::leak(ticker.into_boxed_str()), // Convert String to &'static str
+                                Box::leak(ticker_string.into_boxed_str()),
                                 qty,
                                 prc,
                                 current_sim_time,
@@ -108,28 +111,31 @@ fn main() {
 
                             match stock_exchange.place_order(order.clone()) {
                                 Ok(trades) => {
+                                    // trades is Vec<crate::orders::Trade>
                                     if trades.is_empty() {
                                         println!(
                                             "  Order for {} added to book.",
                                             order.security_ticker
                                         );
                                     }
-                                    for trade in trades {
+                                    for trade_item in trades {
+                                        // trade_item is crate::orders::Trade
                                         println!(
                                             "  TRADE EXECUTED: {} {} @ ${:.2} (Buy Order: {}, Sell Order: {})",
-                                            trade.quantity,
-                                            trade.security_ticker,
-                                            trade.price as f64 / 100.0,
-                                            trade.matched_buy_order_id,
-                                            trade.matched_sell_order_id
+                                            trade_item.quantity,
+                                            trade_item.security_ticker,
+                                            trade_item.price as f64 / 100.0,
+                                            trade_item.matched_buy_order_id,
+                                            trade_item.matched_sell_order_id
                                         );
-                                        // If this player's buy order was part of the trade
-                                        if trade.matched_buy_order_id == order.id {
-                                            player.cash_balance -= trade.quantity * trade.price;
+                                        if trade_item.matched_buy_order_id == order.id {
+                                            player.cash_balance -=
+                                                trade_item.quantity * trade_item.price;
+                                            // Corrected call:
                                             player.add_shares(
-                                                &trade.security_ticker, // Already &'static str from order
-                                                trade.quantity,
-                                                trade.price,
+                                                trade_item.security_ticker.clone(), // Clone the Cow
+                                                trade_item.quantity,
+                                                trade_item.price,
                                             );
                                             println!(
                                                 "    Your portfolio updated. New cash balance: ${:.2}",
@@ -152,37 +158,37 @@ fn main() {
                 }
             }
             "sell" => {
-                // Expected: sell <TICKER> <QUANTITY> <PRICE_PER_SHARE>
-                // Example: sell ABC 5 75.50
                 if parts.len() == 4 {
-                    let ticker = parts[1].to_uppercase();
-                    let quantity_to_sell: Result<u64, _> = parts[2].parse();
+                    let ticker_string = parts[1].to_uppercase();
+                    let quantity_to_sell_res: Result<u64, _> = parts[2].parse();
                     let price_str = parts[3];
-                    let price: Result<u64, _> = price_str.replace('.', "").parse();
+                    let price_res: Result<u64, _> = price_str.replace('.', "").parse();
 
-                    match (quantity_to_sell, price) {
+                    match (quantity_to_sell_res, price_res) {
                         (Ok(qty_sell), Ok(prc_sell)) => {
-                            // Check if player has enough shares
                             let owned_shares = player
                                 .portfolio
-                                .get(ticker.as_str())
+                                .get(ticker_string.as_str()) // Look up with &str
                                 .map_or(0, |item| item.quantity);
                             if owned_shares < qty_sell {
                                 println!(
                                     "Error: Not enough {} shares to sell. You own: {}",
-                                    ticker, owned_shares
+                                    ticker_string, owned_shares
                                 );
                                 continue;
                             }
-                            if !stock_exchange.securities.contains_key(ticker.as_str()) {
-                                println!("Error: Security {} not found.", ticker);
+                            if !stock_exchange
+                                .securities
+                                .contains_key(ticker_string.as_str())
+                            {
+                                println!("Error: Security {} not found.", ticker_string);
                                 continue;
                             }
 
                             let order = Order::new(
                                 next_order_id_counter,
                                 OrderType::Sell,
-                                Box::leak(ticker.into_boxed_str()), // Convert String to &'static str
+                                Box::leak(ticker_string.into_boxed_str()),
                                 qty_sell,
                                 prc_sell,
                                 current_sim_time,
@@ -199,27 +205,30 @@ fn main() {
 
                             match stock_exchange.place_order(order.clone()) {
                                 Ok(trades) => {
+                                    // trades is Vec<crate::orders::Trade>
                                     if trades.is_empty() {
                                         println!(
                                             "  Order for {} added to book.",
                                             order.security_ticker
                                         );
                                     }
-                                    for trade in trades {
+                                    for trade_item in trades {
+                                        // trade_item is crate::orders::Trade
                                         println!(
                                             "  TRADE EXECUTED: {} {} @ ${:.2} (Buy Order: {}, Sell Order: {})",
-                                            trade.quantity,
-                                            trade.security_ticker,
-                                            trade.price as f64 / 100.0,
-                                            trade.matched_buy_order_id,
-                                            trade.matched_sell_order_id
+                                            trade_item.quantity,
+                                            trade_item.security_ticker,
+                                            trade_item.price as f64 / 100.0,
+                                            trade_item.matched_buy_order_id,
+                                            trade_item.matched_sell_order_id
                                         );
-                                        // If this player's sell order was part of the trade
-                                        if trade.matched_sell_order_id == order.id {
-                                            player.cash_balance += trade.quantity * trade.price;
+                                        if trade_item.matched_sell_order_id == order.id {
+                                            player.cash_balance +=
+                                                trade_item.quantity * trade_item.price;
+                                            // Corrected call:
                                             match player.remove_shares(
-                                                &trade.security_ticker,
-                                                trade.quantity,
+                                                trade_item.security_ticker.clone(), // Clone the Cow
+                                                trade_item.quantity,
                                             ) {
                                                 Ok(()) => println!(
                                                     "    Your portfolio updated. New cash balance: ${:.2}",
@@ -228,7 +237,7 @@ fn main() {
                                                 Err(e) => eprintln!(
                                                     "    Error updating portfolio after sell: {}",
                                                     e
-                                                ), // Should not happen if pre-check was done
+                                                ),
                                             }
                                         }
                                     }
@@ -252,15 +261,15 @@ fn main() {
                 if player.portfolio.is_empty() {
                     println!("  No securities held.");
                 } else {
-                    for (ticker, item) in &player.portfolio {
+                    for (ticker_cow, item) in &player.portfolio {
                         let current_market_price = stock_exchange
                             .securities
-                            .get(ticker.as_ref()) // Cow<&'static str> to &str
+                            .get(ticker_cow.as_ref())
                             .map_or(0, |sec| sec.current_price);
                         let market_value = item.quantity * current_market_price;
                         println!(
                             "  {}: {} shares @ avg buy price ${:.2} (Current Market Value: ${:.2})",
-                            ticker,
+                            ticker_cow,
                             item.quantity,
                             item.average_buy_price as f64 / 100.0,
                             market_value as f64 / 100.0
@@ -277,18 +286,17 @@ fn main() {
                 );
             }
             "prices" | "quote" => {
-                // Expected: prices or prices <TICKER>
                 println!("\n--- Current Market Prices ---");
                 if parts.len() > 1 {
                     let ticker_to_quote = parts[1].to_uppercase();
                     if let Some(sec) = stock_exchange.get_security(&ticker_to_quote) {
-                        println!("{}", sec); // Uses the Display impl for Security
+                        println!("{}", sec);
                     } else {
                         println!("Security {} not found.", ticker_to_quote);
                     }
                 } else {
-                    for ticker in stock_exchange.securities.keys() {
-                        if let Some(sec_detail) = stock_exchange.get_security(ticker) {
+                    for ticker_cow in stock_exchange.securities.keys() {
+                        if let Some(sec_detail) = stock_exchange.get_security(ticker_cow.as_ref()) {
                             println!(
                                 "  {}: {} - Price: ${:.2}, Volume: {}",
                                 sec_detail.ticker_symbol,
@@ -301,7 +309,6 @@ fn main() {
                 }
             }
             "orderbook" | "ob" => {
-                // Expected: orderbook <TICKER>
                 if parts.len() == 2 {
                     let ticker_str = parts[1].to_uppercase();
                     if let Some(book_display) = stock_exchange.get_order_book_display(&ticker_str) {
