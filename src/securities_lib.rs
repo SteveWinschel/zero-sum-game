@@ -1,9 +1,8 @@
 use std::borrow::Cow;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)] // Added derive for common traits
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Industry {
-    // Made public
     Technology,
     Finance,
     Healthcare,
@@ -23,7 +22,6 @@ pub enum Industry {
 }
 
 impl Industry {
-    // Consider making this public if needed outside this module
     pub fn new(name: &str) -> Self {
         match name.to_lowercase().as_str() {
             "technology" => Industry::Technology,
@@ -46,28 +44,47 @@ impl Industry {
     }
 }
 
-// For displaying industry names
 impl fmt::Display for Industry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-#[derive(Debug, Clone)] // Added derive for common traits
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Trend {
+    Normal,
+    Rising,
+    Correcting,
+    Bubble,
+    ShortSqueeze,
+    Banned,
+    PanicSelling,
+    PanicBuying,
+    InsidersBuying,
+    InsidersSelling,
+}
+
+// For displaying trend names
+impl fmt::Display for Trend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Security {
-    // Made public
-    pub ticker_symbol: Cow<'static, str>, // Unique identifier for the stock (e.g., "AAPL")
+    pub ticker_symbol: Cow<'static, str>,
     pub name: Cow<'static, str>,
     pub industry: Industry,
-    pub current_price: u64,        // Price in cents for fixed point arithmetic
-    pub previous_close_price: u64, // Price at the end of the previous trading day
-    pub open_price: u64,           // Price at the start of the current trading day
-    pub day_high: u64,             // Highest price during the current trading day
-    pub day_low: u64,              // Lowest price during the current trading day
-    pub volume: u64,               // Number of shares traded during the current day
-    pub market_cap: u64,           // Total market value (current_price * outstanding_shares)
-    pub outstanding_shares: u64,   // Total number of shares issued by the company
-    pub tradable: bool,            // Mainly for restricting trade (e.g., on weekends, or if halted)
+    pub current_price: u64,
+    pub previous_close_price: u64,
+    pub open_price: u64,
+    pub day_high: u64,
+    pub day_low: u64,
+    pub volume: u64,
+    pub market_cap: u64,
+    pub outstanding_shares: u64,
+    pub trend: Trend, // Replaced tradable: bool with the "Trend" enum
 }
 
 impl Security {
@@ -83,18 +100,17 @@ impl Security {
             name: Cow::Borrowed(name),
             industry,
             current_price: initial_price,
-            previous_close_price: initial_price, // Assume previous close is the initial price for simplicity
-            open_price: initial_price,           // Assume open is the initial price
+            previous_close_price: initial_price,
+            open_price: initial_price,
             day_high: initial_price,
             day_low: initial_price,
             volume: 0,
             market_cap: initial_price * outstanding_shares,
             outstanding_shares,
-            tradable: true, // Tradable by default
+            trend: Trend::Normal, // To initialize trend, e.g., to Normal by default
         }
     }
 
-    // Example method to update price, could be more complex
     pub fn update_price(&mut self, new_price: u64) {
         self.current_price = new_price;
         if new_price > self.day_high {
@@ -103,13 +119,11 @@ impl Security {
         if new_price < self.day_low {
             self.day_low = new_price;
         }
-        // Market cap should also be updated
         self.market_cap = self.current_price * self.outstanding_shares;
     }
 
-    // Method to handle a trade occurring
     pub fn record_trade(&mut self, traded_price: u64, quantity: u64) {
-        self.current_price = traded_price; // Last traded price becomes current price
+        self.current_price = traded_price;
         self.volume += quantity;
         if traded_price > self.day_high {
             self.day_high = traded_price;
@@ -120,14 +134,10 @@ impl Security {
         self.market_cap = self.current_price * self.outstanding_shares;
     }
 
-    // Potentially a method to be called at the end of a trading day
     pub fn close_day(&mut self) {
         self.previous_close_price = self.current_price;
-        // Reset day's high, low, volume for the next day
-        // Open price for next day would be set at market open
     }
 
-    // Potentially a method to be called at the start of a trading day
     pub fn open_day(&mut self, open_price: u64) {
         self.open_price = open_price;
         self.current_price = open_price;
@@ -137,7 +147,6 @@ impl Security {
     }
 }
 
-// For displaying security information
 impl fmt::Display for Security {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Ticker: {}", self.ticker_symbol)?;
@@ -146,6 +155,6 @@ impl fmt::Display for Security {
         writeln!(f, "  Price: ${:.2}", self.current_price as f64 / 100.0)?;
         writeln!(f, "  Volume: {}", self.volume)?;
         writeln!(f, "  Market Cap: ${:.2}", self.market_cap as f64 / 100.0)?;
-        writeln!(f, "  Tradable: {}", self.tradable)
+        writeln!(f, "  Trend: {}", self.trend) // Updated to display trend
     }
 }

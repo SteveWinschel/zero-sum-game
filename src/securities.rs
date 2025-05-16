@@ -1,5 +1,4 @@
-// Now 'crate::securities_lib' refers to the structs and enums we defined.
-use crate::securities_lib::{Industry, Security};
+use crate::securities_lib::{Industry, Security, Trend};
 use std::borrow::Cow;
 
 pub fn get_initial_securities() -> Vec<Security> {
@@ -37,7 +36,7 @@ pub fn get_initial_securities() -> Vec<Security> {
             volume: 0,
             market_cap: 1000 * 200000,
             outstanding_shares: 200000,
-            tradable: true,
+            trend: Trend::Normal, // Replaced tradable: true
         },
     ]
 }

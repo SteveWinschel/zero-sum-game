@@ -2,8 +2,9 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use crate::orders::{Order, OrderType, Trade};
-use crate::securities_lib::Security;
+use crate::securities_lib::{Security, Trend}; // Added Trend
 
+// ... (OrderBook struct and impl remains the same)
 type BuyOrderBook = BTreeMap<u64, VecDeque<Order>>;
 type SellOrderBook = BTreeMap<u64, VecDeque<Order>>;
 
@@ -42,9 +43,6 @@ pub struct StockExchange {
     pub securities: HashMap<Cow<'static, str>, Security>,
     order_books: HashMap<Cow<'static, str>, OrderBook>,
     trade_history: Vec<Trade>,
-    // Removed: next_order_id: u64 -> This counter is now managed in main.rs
-    // If exchange were to assign IDs, it would be here.
-    // current_time: u64, // If exchange manages time for trades/orders
 }
 
 impl StockExchange {
@@ -53,7 +51,6 @@ impl StockExchange {
             securities: HashMap::new(),
             order_books: HashMap::new(),
             trade_history: Vec::new(),
-            // current_time: 0,
         }
     }
 
@@ -78,24 +75,20 @@ impl StockExchange {
         self.securities.get_mut(ticker)
     }
 
-    // Method to get current simulation time if managed by exchange
-    // fn get_current_time(&mut self) -> u64 {
-    //     self.current_time += 1;
-    //     self.current_time
-    // }
-
     pub fn place_order(&mut self, order: Order) -> Result<Vec<Trade>, String> {
-        if !self.securities.contains_key(&order.security_ticker)
-            || !self.securities[&order.security_ticker].tradable
-        {
+        let security_exists_and_tradable = self
+            .securities
+            .get(&order.security_ticker)
+            .map_or(false, |sec| sec.trend != Trend::Banned); // Updated logic
+
+        if !security_exists_and_tradable {
             return Err(format!(
-                "Security {} is not tradable or does not exist.",
+                "Security {} is not tradable (current trend is Banned) or does not exist.",
                 order.security_ticker
             ));
         }
 
-        // let trade_timestamp = self.get_current_time(); // If exchange manages time
-        let trade_timestamp = order.timestamp; // Or use timestamp from order, or a new one for trade
+        let trade_timestamp = order.timestamp;
 
         let order_book = self.order_books.get_mut(&order.security_ticker).unwrap();
         let mut trades = Vec::new();
@@ -103,6 +96,7 @@ impl StockExchange {
 
         match order_to_process.order_type {
             OrderType::Buy => {
+                // ... (rest of the Buy logic remains the same)
                 let mut prices_to_remove_from_sell_book = Vec::new();
                 for (&sell_price, sell_orders_at_price) in order_book.sell_orders.iter_mut() {
                     if order_to_process.quantity == 0 {
@@ -128,7 +122,7 @@ impl StockExchange {
                             order_to_process.security_ticker.clone(),
                             trade_quantity,
                             trade_price,
-                            trade_timestamp, // Use a consistent timestamp for the trade
+                            trade_timestamp,
                         );
                         trades.push(trade.clone());
                         self.trade_history.push(trade);
@@ -162,6 +156,7 @@ impl StockExchange {
                 }
             }
             OrderType::Sell => {
+                // ... (rest of the Sell logic remains the same)
                 let mut prices_to_remove_from_buy_book = Vec::new();
                 for (&buy_price, buy_orders_at_price) in order_book.buy_orders.iter_mut().rev() {
                     if order_to_process.quantity == 0 {
@@ -187,7 +182,7 @@ impl StockExchange {
                             order_to_process.security_ticker.clone(),
                             trade_quantity,
                             trade_price,
-                            trade_timestamp, // Use a consistent timestamp for the trade
+                            trade_timestamp,
                         );
                         trades.push(trade.clone());
                         self.trade_history.push(trade);
@@ -224,6 +219,7 @@ impl StockExchange {
         Ok(trades)
     }
 
+    // ... (get_order_book_display and get_trade_history_display remain the same)
     pub fn get_order_book_display(&self, ticker: &str) -> Option<String> {
         self.order_books.get(ticker).map(|ob| {
             let mut display = String::new();
@@ -232,7 +228,7 @@ impl StockExchange {
             for (price, orders) in ob.sell_orders.iter() {
                 for order in orders {
                     display.push_str(&format!(
-                        "    Price: ${:.2}, Qty: {}, ID: {}\n", // Displaying u64 ID
+                        "    Price: ${:.2}, Qty: {}, ID: {}\n",
                         *price as f64 / 100.0,
                         order.quantity,
                         order.id
@@ -243,7 +239,7 @@ impl StockExchange {
             for (price, orders) in ob.buy_orders.iter().rev() {
                 for order in orders {
                     display.push_str(&format!(
-                        "    Price: ${:.2}, Qty: {}, ID: {}\n", // Displaying u64 ID
+                        "    Price: ${:.2}, Qty: {}, ID: {}\n",
                         *price as f64 / 100.0,
                         order.quantity,
                         order.id
@@ -270,8 +266,7 @@ impl StockExchange {
                 ));
                 display.push_str(&format!(
                     "    Matched Buy Order ID: {}, Matched Sell Order ID: {}\n",
-                    trade.matched_buy_order_id,  // Now u64
-                    trade.matched_sell_order_id, // Now u64
+                    trade.matched_buy_order_id, trade.matched_sell_order_id,
                 ));
             }
         }
