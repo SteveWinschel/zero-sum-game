@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use uuid::Uuid; // Also used here for trader IDs
 
 use crate::securities_lib::Security; // Assuming Security is needed here, adjust if not
 
@@ -12,17 +11,15 @@ pub struct PortfolioItem {
 }
 
 #[derive(Debug)]
-pub struct Trader {
-    pub id: Uuid,
-    pub name: String,                                         // For display purposes
-    pub cash_balance: u64,                                    // In cents
+pub struct Player {
+    pub name: &'static &str, // For display purposes, can be kept
+    pub cash_balance: u64,   // In cents
     pub portfolio: HashMap<Cow<'static, str>, PortfolioItem>, // Ticker symbol -> PortfolioItem
 }
 
-impl Trader {
+impl Player {
     pub fn new(name: String, initial_cash: u64) -> Self {
-        Trader {
-            id: Uuid::new_v4(),
+        Player {
             name,
             cash_balance: initial_cash,
             portfolio: HashMap::new(),

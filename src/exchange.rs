@@ -1,28 +1,22 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, VecDeque}; // BTreeMap for sorted order book
-use uuid::Uuid;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+// Removed: use uuid::Uuid; // No longer needed here
 
 use crate::order::{Order, OrderType, Trade};
-use crate::securities_lib::{Industry, Security};
-use crate::trader::Trader; // Assuming direct interaction, might be event-based
+use crate::securities_lib::Security; // Removed Industry as it's not directly used here
 
-// Order book for a single security
-// We use BTreeMap to keep orders sorted by price.
-// For Buy orders: Higher price is better (so descending order of price).
-// For Sell orders: Lower price is better (so ascending order of price).
-// Within the same price, orders are typically FIFO (First-In, First-Out), hence VecDeque.
-type BuyOrderBook = BTreeMap<u64, VecDeque<Order>>; // Price (desc) -> Queue of Orders
-type SellOrderBook = BTreeMap<u64, VecDeque<Order>>; // Price (asc) -> Queue of Orders
+type BuyOrderBook = BTreeMap<u64, VecDeque<Order>>;
+type SellOrderBook = BTreeMap<u64, VecDeque<Order>>;
 
 pub struct OrderBook {
-    pub buy_orders: BuyOrderBook, // Max-heap based on price (BTreeMap sorts keys)
-    pub sell_orders: SellOrderBook, // Min-heap based on price (BTreeMap sorts keys)
+    pub buy_orders: BuyOrderBook,
+    pub sell_orders: SellOrderBook,
 }
 
 impl OrderBook {
     pub fn new() -> Self {
         OrderBook {
-            buy_orders: BTreeMap::new(), // Use std::collections::btree_map::Keys::rev() for descending iteration
+            buy_orders: BTreeMap::new(),
             sell_orders: BTreeMap::new(),
         }
     }
@@ -30,9 +24,6 @@ impl OrderBook {
     pub fn add_order(&mut self, order: Order) {
         match order.order_type {
             OrderType::Buy => {
-                // For BTreeMap, higher price means it comes later. To get FIFO for buys (highest price first),
-                // we store price and iterate in reverse or store negative price if we wanted strict heap behavior.
-                // Simpler: BTreeMap sorts ascendingly. For buys, we want to match highest bid.
                 self.buy_orders
                     .entry(order.price)
                     .or_default()
@@ -49,11 +40,12 @@ impl OrderBook {
 }
 
 pub struct StockExchange {
-    pub securities: HashMap<Cow<'static, str>, Security>, // Ticker -> Security details
-    order_books: HashMap<Cow<'static, str>, OrderBook>,   // Ticker -> OrderBook
-    // traders: HashMap<Uuid, Trader>, // If the exchange manages traders directly
-    // This is a simple model. A real exchange would have more complex trader/member management.
+    pub securities: HashMap<Cow<'static, str>, Security>,
+    order_books: HashMap<Cow<'static, str>, OrderBook>,
     trade_history: Vec<Trade>,
+    // Removed: next_order_id: u64 -> This counter is now managed in main.rs
+    // If exchange were to assign IDs, it would be here.
+    // current_time: u64, // If exchange manages time for trades/orders
 }
 
 impl StockExchange {
@@ -62,6 +54,7 @@ impl StockExchange {
             securities: HashMap::new(),
             order_books: HashMap::new(),
             trade_history: Vec::new(),
+            // current_time: 0,
         }
     }
 
@@ -86,9 +79,12 @@ impl StockExchange {
         self.securities.get_mut(ticker)
     }
 
-    // This is a simplified order processing logic.
-    // A real system would need to handle partial fills, different order types (market, limit, etc.),
-    // and potentially update trader portfolios directly or via an event system.
+    // Method to get current simulation time if managed by exchange
+    // fn get_current_time(&mut self) -> u64 {
+    //     self.current_time += 1;
+    //     self.current_time
+    // }
+
     pub fn place_order(&mut self, order: Order) -> Result<Vec<Trade>, String> {
         if !self.securities.contains_key(&order.security_ticker)
             || !self.securities[&order.security_ticker].tradable
@@ -99,21 +95,23 @@ impl StockExchange {
             ));
         }
 
-        let order_book = self.order_books.get_mut(&order.security_ticker).unwrap(); // Should exist if security exists
+        // let trade_timestamp = self.get_current_time(); // If exchange manages time
+        let trade_timestamp = order.timestamp; // Or use timestamp from order, or a new one for trade
+
+        let order_book = self.order_books.get_mut(&order.security_ticker).unwrap();
         let mut trades = Vec::new();
-        let mut order_to_process = order.clone(); // Clone order to modify its quantity
+        let mut order_to_process = order.clone();
 
         match order_to_process.order_type {
             OrderType::Buy => {
-                // Iterate sell orders from lowest price (best for buyer)
                 let mut prices_to_remove_from_sell_book = Vec::new();
                 for (&sell_price, sell_orders_at_price) in order_book.sell_orders.iter_mut() {
                     if order_to_process.quantity == 0 {
                         break;
-                    } // Buy order filled
+                    }
                     if sell_price > order_to_process.price {
                         break;
-                    } // No more sell orders at or below buy limit
+                    }
 
                     let mut orders_in_queue_to_remove = 0;
                     for sell_order in sell_orders_at_price.iter_mut() {
@@ -123,7 +121,7 @@ impl StockExchange {
 
                         let trade_quantity =
                             std::cmp::min(order_to_process.quantity, sell_order.quantity);
-                        let trade_price = sell_price; // Trade occurs at the existing order's price (sell_order's price)
+                        let trade_price = sell_price;
 
                         let trade = Trade::new(
                             order_to_process.id,
@@ -131,7 +129,7 @@ impl StockExchange {
                             order_to_process.security_ticker.clone(),
                             trade_quantity,
                             trade_price,
-                            0, // Placeholder for actual trade timestamp
+                            trade_timestamp, // Use a consistent timestamp for the trade
                         );
                         trades.push(trade.clone());
                         self.trade_history.push(trade);
@@ -139,7 +137,6 @@ impl StockExchange {
                         order_to_process.quantity -= trade_quantity;
                         sell_order.quantity -= trade_quantity;
 
-                        // Update security's last traded price and volume
                         if let Some(sec) =
                             self.securities.get_mut(&order_to_process.security_ticker)
                         {
@@ -150,7 +147,6 @@ impl StockExchange {
                             orders_in_queue_to_remove += 1;
                         }
                     }
-                    // Remove filled orders from the queue
                     for _ in 0..orders_in_queue_to_remove {
                         sell_orders_at_price.pop_front();
                     }
@@ -162,22 +158,19 @@ impl StockExchange {
                     order_book.sell_orders.remove(&price_key);
                 }
 
-                // If buy order is not fully filled, add remaining to buy order book
                 if order_to_process.quantity > 0 {
                     order_book.add_order(order_to_process);
                 }
             }
             OrderType::Sell => {
-                // Iterate buy orders from highest price (best for seller) - BTreeMap iterates ascendingly by default
                 let mut prices_to_remove_from_buy_book = Vec::new();
-                // We need to iterate in reverse for buy orders (highest price first)
                 for (&buy_price, buy_orders_at_price) in order_book.buy_orders.iter_mut().rev() {
                     if order_to_process.quantity == 0 {
                         break;
-                    } // Sell order filled
+                    }
                     if buy_price < order_to_process.price {
                         break;
-                    } // No more buy orders at or above sell limit
+                    }
 
                     let mut orders_in_queue_to_remove = 0;
                     for buy_order in buy_orders_at_price.iter_mut() {
@@ -187,7 +180,7 @@ impl StockExchange {
 
                         let trade_quantity =
                             std::cmp::min(order_to_process.quantity, buy_order.quantity);
-                        let trade_price = buy_price; // Trade occurs at the existing order's price (buy_order's price)
+                        let trade_price = buy_price;
 
                         let trade = Trade::new(
                             buy_order.id,
@@ -195,7 +188,7 @@ impl StockExchange {
                             order_to_process.security_ticker.clone(),
                             trade_quantity,
                             trade_price,
-                            0, // Placeholder
+                            trade_timestamp, // Use a consistent timestamp for the trade
                         );
                         trades.push(trade.clone());
                         self.trade_history.push(trade);
@@ -224,7 +217,6 @@ impl StockExchange {
                     order_book.buy_orders.remove(&price_key);
                 }
 
-                // If sell order is not fully filled, add remaining to sell order book
                 if order_to_process.quantity > 0 {
                     order_book.add_order(order_to_process);
                 }
@@ -239,23 +231,23 @@ impl StockExchange {
             display.push_str(&format!("Order Book for {}:\n", ticker));
             display.push_str("  --- SELL ORDERS (Asks) ---\n");
             for (price, orders) in ob.sell_orders.iter() {
-                // Lowest price first
                 for order in orders {
                     display.push_str(&format!(
-                        "    Price: ${:.2}, Qty: {}\n",
+                        "    Price: ${:.2}, Qty: {}, ID: {}\n", // Displaying u64 ID
                         *price as f64 / 100.0,
-                        order.quantity
+                        order.quantity,
+                        order.id
                     ));
                 }
             }
             display.push_str("  --- BUY ORDERS (Bids) ---\n");
             for (price, orders) in ob.buy_orders.iter().rev() {
-                // Highest price first
                 for order in orders {
                     display.push_str(&format!(
-                        "    Price: ${:.2}, Qty: {}\n",
+                        "    Price: ${:.2}, Qty: {}, ID: {}\n", // Displaying u64 ID
                         *price as f64 / 100.0,
-                        order.quantity
+                        order.quantity,
+                        order.id
                     ));
                 }
             }
@@ -268,14 +260,19 @@ impl StockExchange {
         if self.trade_history.is_empty() {
             display.push_str("No trades yet.\n");
         } else {
-            for trade in &self.trade_history {
+            for (index, trade) in self.trade_history.iter().enumerate() {
                 display.push_str(&format!(
-                    "  Ticker: {}, Qty: {}, Price: ${:.2}, BuyO_ID: ..., SellO_ID: ...\n",
+                    "  Trade Index: {}, Ticker: {}, Qty: {}, Price: ${:.2}, Timestamp: {}\n",
+                    index,
                     trade.security_ticker,
                     trade.quantity,
                     trade.price as f64 / 100.0,
-                    // trade.buy_order_id, // Too verbose for simple display
-                    // trade.sell_order_id,
+                    trade.timestamp,
+                ));
+                display.push_str(&format!(
+                    "    Matched Buy Order ID: {}, Matched Sell Order ID: {}\n",
+                    trade.matched_buy_order_id,  // Now u64
+                    trade.matched_sell_order_id, // Now u64
                 ));
             }
         }
