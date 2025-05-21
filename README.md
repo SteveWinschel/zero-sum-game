@@ -47,4 +47,3 @@ This is a hobby project, and all forms of feedback are highly appreciated! Wheth
 * Bug reports
 * Solutions
 * Insults :)
-# zero-sum-game
