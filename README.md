@@ -16,7 +16,7 @@ To get started with Zero-Sum Game, you'll need to have Rust and Cargo installed.
 
 1.  **Clone the repository:**
     ```bash
-    git clone <your-repository-url>
+    git clone https://github.com/SteveWinschel/zero-sum-game
     cd zero-sum-game
     ```
 
