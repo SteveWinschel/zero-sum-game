@@ -4,8 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.16.0"
+bevy = { version = "0.16.0", features = [
+    "dynamic_linking",
+] } # Dynamic linking is recommended for dev builds to have faster compilation and testing
 rand = "0.9.1"
+log = { version = "*", features = [
+    "max_level_debug",
+    "release_max_level_warn",
+] }
 
 [profile.dev]
 panic = "unwind"
@@ -13,11 +19,12 @@ opt-level = 0
 debug = true
 strip = "none"
 lto = false
-codegen-units = 16
+codegen-units = 255
 incremental = true
 
-[profile.dev.package."*"]
+[profile.dev.package."bevy"] # The engine needs to be optimised
 opt-level = 3
+codegen-units = 1
 
 [profile.release]
 opt-level = 3
